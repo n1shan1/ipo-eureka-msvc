@@ -1,19 +1,26 @@
 # Multi-stage build: Build stage
-FROM eclipse-temurin:17-jdk AS builder
+FROM maven:3.9.11-eclipse-temurin-17 AS builder
 
-WORKDIR /app
+WORKDIR /build
 
-# Copy parent pom first
-COPY pom.xml ../pom.xml
-COPY common-dto ../common-dto
-
-# Copy service files
+# Copy parent POM
 COPY pom.xml .
-COPY src ./src
+
+# Copy all module POMs (Maven needs to know about all modules)
+COPY common-dto/pom.xml ./common-dto/
+COPY service-registry/pom.xml ./service-registry/
+COPY api-gateway/pom.xml ./api-gateway/
+COPY ipo-application-service/pom.xml ./ipo-application-service/
+COPY ipo-payment-service/pom.xml ./ipo-payment-service/
+COPY ipo-allotment-service/pom.xml ./ipo-allotment-service/
+COPY ipo-notification-service/pom.xml ./ipo-notification-service/
+
+# Copy source for modules we need to build
+COPY common-dto/src ./common-dto/src
+COPY ipo-allotment-service/src ./ipo-allotment-service/src
 
 # Build the application
-RUN apt-get update && apt-get install -y maven
-RUN mvn clean package -DskipTests -f ../pom.xml -pl ipo-allotment-service -am
+RUN mvn clean package -DskipTests -pl ipo-allotment-service -am
 
 # Runtime stage
 FROM eclipse-temurin:17-jre
@@ -21,7 +28,7 @@ FROM eclipse-temurin:17-jre
 WORKDIR /app
 
 # Copy the built jar from builder stage
-COPY --from=builder /app/target/*.jar app.jar
+COPY --from=builder /build/ipo-allotment-service/target/*.jar app.jar
 
 EXPOSE 8083
 
