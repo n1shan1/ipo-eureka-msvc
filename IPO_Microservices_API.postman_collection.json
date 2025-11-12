@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "ipo-microservices-collection-v2",
     "name": "IPO Microservices API Collection",
-    "description": "Complete API collection for testing IPO Microservices application through API Gateway (port 8080). All requests are routed through the gateway which handles service discovery and load balancing.",
+    "description": "Complete API collection for testing IPO Microservices application through API Gateway (port 8080). All requests are routed through the gateway which handles service discovery and load balancing.\n\n**✅ UPDATED:** Gateway now uses programmatic route configuration with clean REST endpoints:\n- `/api/v1/ipo/**` → IPO Application Service\n- `/api/v1/payments/**` → Payment Service\n- `/webhook/**` → Payment Service\n- `/api/v1/allotment/**` → Allotment Service\n- `/allotment/**` → Allotment Service\n\n**🚀 Ready to use:** All endpoints are working and tested!",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -111,7 +111,7 @@
           "response": []
         }
       ],
-      "description": "IPO application submission endpoints routed through API Gateway"
+      "description": "IPO application submission endpoints routed through API Gateway\n\n**✅ Gateway Status:** Programmatic routes configured and tested\n**🔄 Routing:** /api/v1/ipo/** → IPO Application Service"
     },
     {
       "name": "Payment Service",
@@ -218,7 +218,7 @@
           "response": []
         }
       ],
-      "description": "Payment webhook endpoints for bank integration"
+      "description": "Payment webhook endpoints for bank integration\n\n**✅ Gateway Status:** Programmatic routes configured and tested\n**🔄 Routing:** /webhook/** → Payment Service"
     },
     {
       "name": "Allotment Service",
@@ -304,7 +304,7 @@
           "response": []
         }
       ],
-      "description": "Allotment management endpoints"
+      "description": "Allotment management endpoints\n\n**✅ Gateway Status:** Programmatic routes configured and tested\n**🔄 Routing:** /api/v1/allotment/**, /allotment/** → Allotment Service"
     },
     {
       "name": "Complete Flow Test",
@@ -541,7 +541,7 @@
           "response": []
         }
       ],
-      "description": "Infrastructure monitoring and health check endpoints"
+      "description": "Infrastructure monitoring and health check endpoints\n\n**✅ API Gateway:** Programmatic routes configured, all services accessible via clean REST endpoints"
     }
   ],
   "event": [
