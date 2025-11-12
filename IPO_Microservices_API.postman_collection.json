@@ -1,0 +1,600 @@
+{
+  "info": {
+    "_postman_id": "ipo-microservices-collection-v2",
+    "name": "IPO Microservices API Collection",
+    "description": "Complete API collection for testing IPO Microservices application through API Gateway (port 8080). All requests are routed through the gateway which handles service discovery and load balancing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "IPO Application Service",
+      "item": [
+        {
+          "name": "Submit IPO Application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Save application ID for later use",
+                  "if (pm.response.code === 202 || pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"applicationId\", jsonData.applicationId);",
+                  "    pm.environment.set(\"ipoId\", jsonData.ipoId);",
+                  "    console.log(\"✅ Application ID: \" + jsonData.applicationId);",
+                  "    console.log(\"📝 Next Step: Wait 5 seconds, then get mandate ID from database\");",
+                  "}",
+                  "",
+                  "pm.test(\"Status code is 200 or 202\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has applicationId\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('applicationId');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}",
+                "description": "Unique key to prevent duplicate submissions"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"investorId\": \"investor-{{$randomInt}}\",\n  \"lots\": 5,\n  \"userUpiId\": \"investor@okaxis\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ipo/{{ipoId}}/apply",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ipo", "{{ipoId}}", "apply"]
+            },
+            "description": "Submit a new IPO application through the API Gateway.\n\n**Flow:**\n1. Creates a new application record in PENDING status\n2. Publishes `application.created` event to ActiveMQ\n3. Payment service listens and creates payment mandate\n4. Returns application details\n\n**Idempotency:**\nUse the same Idempotency-Key to prevent duplicate submissions. The system will return the existing application if the key is reused."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit IPO Application (Idempotency Test)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 (returns existing)\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Returns existing application\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('applicationId');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "idempotency-test-123",
+                "description": "Fixed key to test idempotency"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"investorId\": \"investor001\",\n  \"lots\": 3,\n  \"userUpiId\": \"investor001@okaxis\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ipo/{{ipoId}}/apply",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ipo", "{{ipoId}}", "apply"]
+            },
+            "description": "Test idempotency by submitting with the same Idempotency-Key.\n\n**First request:** Returns 202 with new applicationId\n**Subsequent requests:** Returns 200 with existing application\n\nRun this request multiple times to see idempotency in action."
+          },
+          "response": []
+        }
+      ],
+      "description": "IPO application submission endpoints routed through API Gateway"
+    },
+    {
+      "name": "Payment Service",
+      "item": [
+        {
+          "name": "Approve Payment (Webhook)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Check if mandate ID is set",
+                  "if (!pm.environment.get(\"mandateId\")) {",
+                  "    console.log(\"⚠️  WARNING: mandateId not set in environment\");",
+                  "    console.log(\"📋 Get mandate ID from database:\");",
+                  "    console.log(\"   docker compose exec postgres psql -U postgres -d ipo_db -t -c \\\"SELECT id FROM mandates ORDER BY id DESC LIMIT 1;\\\"\");",
+                  "    console.log(\"\");",
+                  "    console.log(\"Then set it as environment variable: mandateId\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Webhook processed successfully\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Webhook processed\");",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    console.log(\"✅ Payment approved successfully\");",
+                  "    console.log(\"📝 Next Step: The application status will be updated to APPROVED via events\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mandateId\": \"{{mandateId}}\",\n  \"status\": \"APPROVED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["webhook"]
+            },
+            "description": "Bank webhook to approve payment mandate.\n\n**⚠️ IMPORTANT:** You need to get the mandateId from the database first.\n\n**Steps:**\n1. Submit an IPO application\n2. Wait 5 seconds for payment service to create mandate\n3. Get mandate ID from database:\n   ```bash\n   docker compose exec postgres psql -U postgres -d ipo_db -t -c \"SELECT id FROM mandates ORDER BY id DESC LIMIT 1;\"\n   ```\n4. Set the mandate ID in environment variables\n5. Run this webhook request\n\n**Flow:**\n1. Updates mandate status to APPROVED\n2. Publishes `mandate.approved` event to ActiveMQ\n3. Application service listens and updates application status to APPROVED"
+          },
+          "response": []
+        },
+        {
+          "name": "Reject Payment (Webhook)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Webhook processed\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Webhook processed\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mandateId\": \"{{mandateId}}\",\n  \"status\": \"FAILED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["webhook"]
+            },
+            "description": "Bank webhook to reject/fail payment mandate.\n\n**Flow:**\n1. Updates mandate status to FAILED\n2. Publishes `mandate.failed` event\n3. Application status is marked as failed"
+          },
+          "response": []
+        }
+      ],
+      "description": "Payment webhook endpoints for bank integration"
+    },
+    {
+      "name": "Allotment Service",
+      "item": [
+        {
+          "name": "Trigger Allotment Process",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Allotment triggered\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"triggered successfully\");",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    console.log(\"✅ Allotment process triggered\");",
+                  "    console.log(\"📊 Check results in database:\");",
+                  "    console.log(\"   docker compose exec postgres psql -U postgres -d ipo_db -c \\\"SELECT * FROM allotments;\\\"\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/allotment/trigger",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "allotment", "trigger"]
+            },
+            "description": "Manually trigger the IPO share allotment lottery process.\n\n**⚠️ NOTE:** This endpoint may take 30-60 seconds to respond as services need to fully register with Eureka.\n\n**Prerequisites:**\n- At least one application with APPROVED status\n- All services registered with Eureka (check http://localhost:8761)\n\n**Flow:**\n1. Allotment service calls application service to get approved applications\n2. Runs lottery algorithm to select winners\n3. Creates allotment records in database\n4. Publishes allotment events to ActiveMQ\n5. Notification service sends notifications to investors"
+          },
+          "response": []
+        },
+        {
+          "name": "Manual Allotment with Parameters",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Allotment completed\", function () {",
+                  "    pm.expect(pm.response.text()).to.include(\"Allotment completed\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/allotment/allot?ipoId={{ipoId}}&totalShares=1000",
+              "host": ["{{baseUrl}}"],
+              "path": ["allotment", "allot"],
+              "query": [
+                {
+                  "key": "ipoId",
+                  "value": "{{ipoId}}",
+                  "description": "IPO identifier"
+                },
+                {
+                  "key": "totalShares",
+                  "value": "1000",
+                  "description": "Total shares available for allotment"
+                }
+              ]
+            },
+            "description": "Perform manual allotment for a specific IPO with specified parameters.\n\n**Parameters:**\n- `ipoId`: The IPO identifier (default: testipo)\n- `totalShares`: Total shares available for allotment\n\nAdjust the totalShares parameter based on your test scenario."
+          },
+          "response": []
+        }
+      ],
+      "description": "Allotment management endpoints"
+    },
+    {
+      "name": "Complete Flow Test",
+      "item": [
+        {
+          "name": "Step 1 - Submit Application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Application submitted successfully\", function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 202 || pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"applicationId\", jsonData.applicationId);",
+                  "    console.log(\"✅ Step 1 Complete: Application submitted\");",
+                  "    console.log(\"📝 Application ID: \" + jsonData.applicationId);",
+                  "    console.log(\"\");",
+                  "    console.log(\"⏭️  Next Step:\");",
+                  "    console.log(\"   1. Wait 5-10 seconds for payment service to process\");",
+                  "    console.log(\"   2. Get mandate ID from database:\");",
+                  "    console.log(\"      docker compose exec postgres psql -U postgres -d ipo_db -t -c \\\"SELECT id FROM mandates ORDER BY id DESC LIMIT 1;\\\"\");",
+                  "    console.log(\"   3. Set mandateId in environment variables\");",
+                  "    console.log(\"   4. Run Step 2\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "flow-test-{{$timestamp}}",
+                "description": "Unique idempotency key with timestamp"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"investorId\": \"flow-test-user-{{$randomInt}}\",\n  \"lots\": 10,\n  \"userUpiId\": \"flowtest@okaxis\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ipo/{{ipoId}}/apply",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "ipo", "{{ipoId}}", "apply"]
+            },
+            "description": "**Step 1 of 3:** Submit IPO application\n\nThis creates a new application and triggers payment mandate creation via events."
+          },
+          "response": []
+        },
+        {
+          "name": "Step 2 - Approve Payment",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Check if mandate ID is set",
+                  "if (!pm.environment.get(\"mandateId\")) {",
+                  "    console.log(\"⚠️  ERROR: mandateId not set!\");",
+                  "    console.log(\"\");",
+                  "    console.log(\"📋 Please run this command to get mandate ID:\");",
+                  "    console.log(\"   docker compose exec postgres psql -U postgres -d ipo_db -t -c \\\"SELECT id FROM mandates ORDER BY id DESC LIMIT 1;\\\"\");",
+                  "    console.log(\"\");",
+                  "    console.log(\"Then set it in environment: mandateId = <value>\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Payment approved successfully\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    console.log(\"✅ Step 2 Complete: Payment approved\");",
+                  "    console.log(\"\");",
+                  "    console.log(\"⏭️  Next Step:\");",
+                  "    console.log(\"   1. Wait 5-10 seconds for application status to update\");",
+                  "    console.log(\"   2. Run Step 3 to trigger allotment\");",
+                  "    console.log(\"\");",
+                  "    console.log(\"💡 Tip: Check Eureka dashboard first:\");",
+                  "    console.log(\"   http://localhost:8761\");",
+                  "    console.log(\"   Ensure all services are registered (may take 30-60 seconds)\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mandateId\": \"{{mandateId}}\",\n  \"status\": \"APPROVED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["webhook"]
+            },
+            "description": "**Step 2 of 3:** Approve payment via bank webhook\n\n**⚠️ Before running:**\n1. Get mandate ID from database (see pre-request script)\n2. Set `mandateId` in environment variables"
+          },
+          "response": []
+        },
+        {
+          "name": "Step 3 - Trigger Allotment",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "console.log(\"⏱️  Note: This request may take 30-60 seconds\");",
+                  "console.log(\"   Services need time to register with Eureka\");",
+                  "console.log(\"\");",
+                  "console.log(\"✓ Check Eureka dashboard: http://localhost:8761\");",
+                  "console.log(\"  All services should show 'UP' status\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Allotment triggered successfully\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    console.log(\"✅ Step 3 Complete: Allotment triggered\");",
+                  "    console.log(\"\");",
+                  "    console.log(\"🎉 Complete flow test finished!\");",
+                  "    console.log(\"\");",
+                  "    console.log(\"📊 Check results:\");",
+                  "    console.log(\"   docker compose exec postgres psql -U postgres -d ipo_db -c \\\"SELECT * FROM allotments;\\\"\");",
+                  "    console.log(\"\");",
+                  "    console.log(\"📧 Check notification service logs:\");",
+                  "    console.log(\"   docker compose logs ipo-notification-service\");",
+                  "} else {",
+                  "    console.log(\"❌ Error: \" + pm.response.text());",
+                  "    console.log(\"\");",
+                  "    console.log(\"💡 Troubleshooting:\");",
+                  "    console.log(\"   1. Check if all services are registered with Eureka\");",
+                  "    console.log(\"   2. Wait 30-60 seconds and try again\");",
+                  "    console.log(\"   3. Check service logs for errors\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/allotment/trigger",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "allotment", "trigger"]
+            },
+            "description": "**Step 3 of 3:** Trigger allotment lottery process\n\n**⚠️ Important:**\n- This may take 30-60 seconds on first run\n- Ensure all services are registered with Eureka\n- Check http://localhost:8761 for service status"
+          },
+          "response": []
+        }
+      ],
+      "description": "**Complete End-to-End Flow Test**\n\nThis folder contains a 3-step test sequence:\n\n1. **Submit Application** - Creates IPO application\n2. **Approve Payment** - Simulates bank webhook approval\n3. **Trigger Allotment** - Runs lottery and allocates shares\n\n**How to use:**\n1. Run requests in sequence (1 → 2 → 3)\n2. Follow instructions in the Console after each request\n3. Wait between steps as indicated\n4. Check database and logs to verify results\n\n**Prerequisites:**\n- All Docker services running: `docker compose ps`\n- Services healthy and registered with Eureka\n- PostgreSQL database accessible"
+    },
+    {
+      "name": "Infrastructure & Monitoring",
+      "item": [
+        {
+          "name": "Eureka Service Registry",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8761",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8761"
+            },
+            "description": "**Eureka Service Registry Dashboard**\n\nView all registered microservices and their health status.\n\n**What to check:**\n- All 5 services should be registered\n- Status should be 'UP'\n- May take 30-60 seconds after startup\n\n**Services:**\n1. API-GATEWAY (port 8080)\n2. IPO-APPLICATION-SERVICE (port 8081)\n3. IPO-PAYMENT-SERVICE (port 8082)\n4. IPO-ALLOTMENT-SERVICE (port 8083)\n5. IPO-NOTIFICATION-SERVICE (port 8084)"
+          },
+          "response": []
+        },
+        {
+          "name": "ActiveMQ Artemis Console",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8161",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8161"
+            },
+            "description": "**ActiveMQ Artemis Web Console**\n\nMonitor message queues and topics.\n\n**Login credentials:**\n- Username: `admin`\n- Password: `admin`\n\n**What to check:**\n- Queue depths\n- Message throughput\n- Consumer connections\n- Dead letter queues"
+          },
+          "response": []
+        },
+        {
+          "name": "API Gateway Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/actuator/health",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "8080",
+              "path": ["actuator", "health"]
+            },
+            "description": "Check API Gateway health status"
+          },
+          "response": []
+        }
+      ],
+      "description": "Infrastructure monitoring and health check endpoints"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-set timestamp for idempotency keys",
+          "if (!pm.environment.get(\"timestamp\")) {",
+          "    pm.environment.set(\"timestamp\", Date.now());",
+          "}",
+          "",
+          "// Check if baseUrl is accessible",
+          "console.log(\"🚀 Request to: \" + pm.request.url.toString());"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Log response time",
+          "console.log(\"⏱️  Response time: \" + pm.response.responseTime + \"ms\");"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string",
+      "description": "API Gateway base URL"
+    },
+    {
+      "key": "ipoId",
+      "value": "testipo",
+      "type": "string",
+      "description": "Default IPO identifier for testing"
+    },
+    {
+      "key": "applicationId",
+      "value": "",
+      "type": "string",
+      "description": "Auto-populated from Submit Application response"
+    },
+    {
+      "key": "mandateId",
+      "value": "",
+      "type": "string",
+      "description": "Must be retrieved from database - see webhook request description"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+# GitHub-specific files for IPO Microservices
+# This directory is typically gitignored, but included for reference
+
+# Template for users to copy
+.env.example
+.dockerignore.example
+
+# CI/CD templates
+.github/workflows/
+
+# Issue templates
+.github/ISSUE_TEMPLATE/
+
+# Pull request template
+.github/PULL_REQUEST_TEMPLATE.md
+
+# Code owners
+.github/CODEOWNERS
+
+# Security policy
+.github/SECURITY.md

@@ -1,0 +1,45 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # Application Service Routes - IPO Applications
+        - id: app_service_route
+          uri: lb://ipo-application-service
+          predicates:
+            - Path=/api/v1/ipo/**
+        
+        # Payment Service Routes - Payment Management
+        - id: payment_service_route
+          uri: lb://ipo-payment-service
+          predicates:
+            - Path=/api/v1/payments/**
+        
+        # Payment Webhook Route - Bank Callbacks
+        - id: payment_webhook_route
+          uri: lb://ipo-payment-service
+          predicates:
+            - Path=/webhook/**
+        
+        # Allotment Service Routes - Trigger Allotment
+        - id: allotment_trigger_route
+          uri: lb://ipo-allotment-service
+          predicates:
+            - Path=/api/v1/allotment/**
+        
+        # Lottery Route - Manual Allotment
+        - id: lottery_route
+          uri: lb://ipo-allotment-service
+          predicates:
+            - Path=/allotment/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER:http://localhost:8761/eureka/}
+  instance:
+    prefer-ip-address: true

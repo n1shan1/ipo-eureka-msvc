@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: ipo-allotment-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ipo_db
+    username: postgres
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  activemq:
+    broker-url: tcp://localhost:61616
+    user: admin
+    password: admin
+
+server:
+  port: 8085
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    hostname: localhost

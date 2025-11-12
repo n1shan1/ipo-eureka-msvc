@@ -1,0 +1,190 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: ipo-postgres
+    environment:
+      POSTGRES_DB: ipo_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ipo-network
+
+  activemq:
+    image: apache/activemq-artemis:latest-alpine
+    container_name: ipo-activemq
+    ports:
+      - "61616:61616"
+      - "8161:8161"
+    environment:
+      ARTEMIS_USER: admin
+      ARTEMIS_PASSWORD: admin
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 61616 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ipo-network
+
+  service-registry:
+    build:
+      context: .
+      dockerfile: service-registry/Dockerfile
+    container_name: ipo-service-registry
+    ports:
+      - "8761:8761"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8761/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ipo-network
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: ipo-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_SERVER: http://service-registry:8761/eureka/
+      SERVER_PORT: 8080
+    depends_on:
+      service-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ipo-network
+
+  ipo-application-service:
+    build:
+      context: .
+      dockerfile: ipo-application-service/Dockerfile
+    container_name: ipo-application-service
+    ports:
+      - "8081:8081"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ipo_db
+      DB_USER: postgres
+      DB_PASSWORD: password
+      ACTIVEMQ_HOST: activemq
+      ACTIVEMQ_PORT: 61616
+      ACTIVEMQ_USER: admin
+      ACTIVEMQ_PASSWORD: admin
+      EUREKA_SERVER: http://service-registry:8761/eureka/
+      SERVER_PORT: 8081
+    depends_on:
+      postgres:
+        condition: service_healthy
+      activemq:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+    networks:
+      - ipo-network
+
+  ipo-payment-service:
+    build:
+      context: .
+      dockerfile: ipo-payment-service/Dockerfile
+    container_name: ipo-payment-service
+    ports:
+      - "8082:8082"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ipo_db
+      DB_USER: postgres
+      DB_PASSWORD: password
+      ACTIVEMQ_HOST: activemq
+      ACTIVEMQ_PORT: 61616
+      ACTIVEMQ_USER: admin
+      ACTIVEMQ_PASSWORD: admin
+      EUREKA_SERVER: http://service-registry:8761/eureka/
+      SERVER_PORT: 8082
+    depends_on:
+      postgres:
+        condition: service_healthy
+      activemq:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+    networks:
+      - ipo-network
+
+  ipo-allotment-service:
+    build:
+      context: .
+      dockerfile: ipo-allotment-service/Dockerfile
+    container_name: ipo-allotment-service
+    ports:
+      - "8087:8087"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ipo_db
+      DB_USER: postgres
+      DB_PASSWORD: password
+      ACTIVEMQ_HOST: activemq
+      ACTIVEMQ_PORT: 61616
+      ACTIVEMQ_USER: admin
+      ACTIVEMQ_PASSWORD: admin
+      EUREKA_SERVER: http://service-registry:8761/eureka/
+      SERVER_PORT: 8087
+    depends_on:
+      postgres:
+        condition: service_healthy
+      activemq:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+    networks:
+      - ipo-network
+
+  ipo-notification-service:
+    build:
+      context: .
+      dockerfile: ipo-notification-service/Dockerfile
+    container_name: ipo-notification-service
+    ports:
+      - "8084:8084"
+    environment:
+      ACTIVEMQ_HOST: activemq
+      ACTIVEMQ_PORT: 61616
+      ACTIVEMQ_USER: admin
+      ACTIVEMQ_PASSWORD: admin
+      EUREKA_SERVER: http://service-registry:8761/eureka/
+      SERVER_PORT: 8084
+    depends_on:
+      activemq:
+        condition: service_healthy
+      service-registry:
+        condition: service_healthy
+    networks:
+      - ipo-network
+
+networks:
+  ipo-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
